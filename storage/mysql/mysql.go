@@ -30,20 +30,20 @@ func New(dsn string) (*Storage, error) {
 
 }
 
-func (s *Storage) Save(ctx context.Context, content string) error {
-	stmt := "INSERT INTO tasks (content, created) VALUES (?, UTC_TIMESTAMP())"
+func (s *Storage) Save(ctx context.Context, content string, chatID int) error {
+	stmt := "INSERT INTO tasks (content, created,chatid) VALUES (?, UTC_TIMESTAMP(),?)"
 
-	if _, err := s.db.ExecContext(ctx, stmt, content); err != nil {
+	if _, err := s.db.ExecContext(ctx, stmt, content, chatID); err != nil {
 		return fmt.Errorf("Can't save page: %w", err)
 	}
 
 	return nil
 }
 
-func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error) {
-	stmt := `SELECT id, content, created, completed FROM tasks`
+func (s *Storage) Tasks(ctx context.Context, chatID int) ([]*storage.Task, error) {
+	stmt := `SELECT id, content, created, deadline, completed FROM tasks WHERE chatid =?`
 
-	rows, err := s.db.QueryContext(ctx, stmt)
+	rows, err := s.db.QueryContext(ctx, stmt, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error) {
 	for rows.Next() {
 		t := &storage.Task{}
 
-		err = rows.Scan(&t.ID, &t.Content, &t.Created, &t.Completed)
+		err = rows.Scan(&t.ID, &t.Content, &t.Created, &t.Deadline, &t.Completed)
 		if err != nil {
 			return nil, err
 		}
@@ -72,31 +72,6 @@ func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error) {
 	}
 
 	return tasks, nil
-}
-
-func (s *Storage) RetrieveUser(u *storage.User) (*storage.User, error) {
-	stmt := "SELECT username, chatid FROM users WHERE chatid = ?"
-	row := s.db.QueryRow(stmt, u.Chatid)
-	var retrievedUser storage.User
-	err := row.Scan(&retrievedUser.Username, &retrievedUser.Chatid)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// No rows were returned, indicating no matching user
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return &retrievedUser, nil
-}
-func (s *Storage) SaveUser(u *storage.User) error {
-	stmt := "INSERT INTO users (chatid, username) VALUES (?, ?)"
-	_, err := s.db.Exec(stmt, u.Chatid, u.Username)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 //func (s *Storage) PastTasks() ( []*storage.Task, error ) {
@@ -152,6 +127,15 @@ func (s *Storage) Complete(ctx context.Context, id int) error {
 	return nil
 }
 
+func (s *Storage) Deadline(ctx context.Context, id int, days int) error {
+	stmt := "UPDATE tasks SET deadline = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY) WHERE id = ?"
+	if _, err := s.db.ExecContext(ctx, stmt, days, id); err != nil {
+		return fmt.Errorf("Can't complete task: %w", err)
+	}
+
+	return nil
+}
+
 //func (s *Storage) Clear() error {
 //	stmt := "DELETE FROM tasks WHERE deadline < UTC_TIMESTAMP()"
 //
@@ -173,7 +157,7 @@ func (s *Storage) Complete(ctx context.Context, id int) error {
 //}
 
 func (s *Storage) IsExists(ctx context.Context, content string) (bool, error) {
-	stmt := "SELECT * FROM tasks where content = ?"
+	stmt := "SELECT COUNT(*) FROM tasks where content = ?"
 
 	var count int
 
@@ -199,23 +183,17 @@ func (s *Storage) IsExistsID(ctx context.Context, id int) (bool, error) {
 func (s *Storage) Init() error {
 	stmt := `
 	CREATE TABLE IF NOT EXISTS tasks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    content VARCHAR(255) UNIQUE NOT NULL,
-    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed BOOLEAN DEFAULT FALSE
-	);`
-	stmt2 := `
-CREATE TABLE IF NOT EXISTS users (
-	username VARCHAR(255) PRIMARY KEY NOT NULL,
-	chatid INTEGER NOT NULL
-);`
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		chatid INT NOT NULL
+		content VARCHAR(255) UNIQUE NOT NULL,
+		created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		deadline TIMESTAMP DEFAULT "0000-00-00 00:00:00",
+		completed BOOLEAN DEFAULT FALSE
+	);
+	`
 	_, err := s.db.Exec(stmt)
 	if err != nil {
-		return err
-	}
-	_, err = s.db.Exec(stmt2)
-	if err != nil {
-		return err
+		return fmt.Errorf("Can't create table: %w", err)
 	}
 
 	return nil

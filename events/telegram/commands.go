@@ -25,6 +25,7 @@ const (
 	AddCmd      = "/add"
 	RemoveCmd   = "/remove"
 	CompleteCmd = "/complete"
+	DeadlineCmd = "/deadline"
 	authCmd     = "/auth"
 	registerCmd = "/register"
 )
@@ -40,10 +41,10 @@ func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username
 	}
 
 	switch command {
-	case authCmd:
-		return p.Auth(chatID, username)
-	case registerCmd:
-		return p.Register(chatID, username)
+	// case authCmd:
+	// 	return p.Auth(chatID, username)
+	// case registerCmd:
+	// 	return p.Register(chatID, username)
 	case StartCmd:
 		return p.tg.SendMessage(ctx, chatID, msgHello)
 	case HelpCmd:
@@ -51,63 +52,64 @@ func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username
 	case CommandsCmd:
 		return p.tg.SendMessage(ctx, chatID, msgCommands)
 	case AddCmd:
-		if isLogin {
-			return p.saveTask(ctx, chatID, content, username)
-		}
-		return p.tg.SendMessage(context.Background(), chatID, msgPlsRegister)
+
+		return p.saveTask(ctx, chatID, content, username)
+
 	case RemoveCmd:
-		if isLogin {
-			return p.removeTask(ctx, chatID, content, username)
-		}
-		return p.tg.SendMessage(context.Background(), chatID, msgPlsRegister)
+
+		return p.removeTask(ctx, chatID, content, username)
+
 	case CompleteCmd:
-		if isLogin {
-			return p.completeTask(ctx, chatID, content, username)
-		}
-		return p.tg.SendMessage(context.Background(), chatID, msgPlsRegister)
+
+		return p.completeTask(ctx, chatID, content, username)
+
+	case DeadlineCmd:
+
+		return p.deadlineTask(ctx, chatID, content, username)
+
 	case TasksCmd:
-		if isLogin {
-			return p.showTasks(ctx, chatID, username)
-		}
-		return p.tg.SendMessage(context.Background(), chatID, msgPlsRegister)
+
+		return p.showTasks(ctx, chatID, username)
+
 	default:
 		return p.tg.SendMessage(ctx, chatID, msgUnknownCommand+": "+command)
 	}
 }
-func (p *Processor) Register(chatID int, username string) (err error) {
-	pretendent := &storage.User{
-		Username: username,
-		Chatid:   chatID,
-	}
-	_, err = p.storage.RetrieveUser(pretendent)
-	if err != nil {
-		errInSaving := p.storage.SaveUser(pretendent)
-		if errInSaving != nil {
-			return p.tg.SendMessage(context.Background(), chatID, msgUserExist)
-		}
-	}
-	return p.tg.SendMessage(context.Background(), chatID, "Send /auth to start!")
-}
-func (p *Processor) Auth(chatID int, username string) (err error) {
-	//check
-	pretendent := &storage.User{
-		Username: username,
-		Chatid:   chatID,
-	}
-	_, err = p.storage.RetrieveUser(pretendent)
-	if err != nil {
-		return p.tg.SendMessage(context.Background(), chatID, msgPlsRegister)
 
-	}
-	isLogin = true
+// func (p *Processor) Register(chatID int, username string) (err error) {
+// 	pretendent := &storage.User{
+// 		Username: username,
+// 		Chatid:   chatID,
+// 	}
+// 	_, err = p.storage.RetrieveUser(pretendent)
+// 	if err != nil {
+// 		errInSaving := p.storage.SaveUser(pretendent)
+// 		if errInSaving != nil {
+// 			return p.tg.SendMessage(context.Background(), chatID, msgUserExist)
+// 		}
+// 	}
+// 	return p.tg.SendMessage(context.Background(), chatID, "Send /auth to start!")
+// }
+// func (p *Processor) Auth(chatID int, username string) (err error) {
+// 	//check
+// 	pretendent := &storage.User{
+// 		Username: username,
+// 		Chatid:   chatID,
+// 	}
+// 	_, err = p.storage.RetrieveUser(pretendent)
+// 	if err != nil {
+// 		return p.tg.SendMessage(context.Background(), chatID, msgPlsRegister)
 
-	return p.tg.SendMessage(context.Background(), chatID, msgHello)
-}
+// 	}
+// 	isLogin = true
+
+// 	return p.tg.SendMessage(context.Background(), chatID, msgHello)
+// }
 
 func (p *Processor) showTasks(ctx context.Context, chatID int, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: can't send tasks", err) }()
 
-	tasks, err := p.storage.Tasks(ctx)
+	tasks, err := p.storage.Tasks(ctx, chatID)
 	if err != nil && !errors.Is(err, storage.ErrNoSavedTasks) {
 		return err
 	}
@@ -118,11 +120,15 @@ func (p *Processor) showTasks(ctx context.Context, chatID int, username string) 
 
 	taskListText := "Task List:\n"
 	for _, task := range tasks {
+		deadline := ""
 		completedStatus := "Not Completed"
 		if task.Completed == 1 {
 			completedStatus = "Completed"
 		}
-		taskListText += fmt.Sprintf("- Task %d: %s (Created: %s, %s)\n", task.ID, task.Content, task.Created.Format("2006-01-02 15:04:05"), completedStatus)
+		if !task.Deadline.IsZero() {
+			deadline = fmt.Sprintf("(Deadline : %s)", task.Deadline.Format("2006-06-02 15:04:05"))
+		}
+		taskListText += fmt.Sprintf("- Task %d: %s \n(Created: %s, %s)\n %s", task.ID, task.Content, task.Created.Format("2006-01-02 15:04:05"), completedStatus, deadline)
 	}
 
 	return p.tg.SendMessage(ctx, chatID, taskListText)
@@ -154,6 +160,42 @@ func (p *Processor) completeTask(ctx context.Context, chatID int, idString strin
 	}
 }
 
+func (p *Processor) deadlineTask(ctx context.Context, chatID int, text string, username string) (err error) {
+	defer func() { err = e.WrapIfErr("can't do command: set deadline to task:", err) }()
+	textSlice := strings.Split(text, " ")
+	var id, days int
+	if len(textSlice) == 2 {
+		_, err1 := strconv.Atoi(textSlice[0])
+		_, err2 := strconv.Atoi(textSlice[1])
+
+		if err1 == nil && err2 == nil {
+			id, _ = strconv.Atoi(textSlice[0])
+			days, _ = strconv.Atoi(textSlice[1])
+		} else {
+			return p.tg.SendMessage(ctx, chatID, msgIncorrectInput+"\n Should be /deadline \"<id> <id>\"")
+		}
+	} else {
+		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput+"\n Should be /deadline \"<id> <id>\"")
+	}
+
+	isExists, err := p.storage.IsExistsID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if !isExists {
+		return p.tg.SendMessage(ctx, chatID, msgDoesntExists)
+	}
+
+	err = p.storage.Deadline(ctx, id, days)
+
+	if err == nil {
+		return p.tg.SendMessage(ctx, chatID, msgDeadline)
+	} else {
+		return fmt.Errorf("Error while setting deadline: ", err)
+	}
+}
+
 //func (p *Processor) pastTasks(chatID int, username string) (err error) {
 //	defer func() { err = e.WrapIfErr("can't do command: can't send tasks", err) }()
 //
@@ -181,7 +223,7 @@ func (p *Processor) saveTask(ctx context.Context, chatID int, content string, us
 		return p.tg.SendMessage(ctx, chatID, msgAlreadyExists)
 	}
 
-	if err := p.storage.Save(ctx, content); err != nil {
+	if err := p.storage.Save(ctx, content, chatID); err != nil {
 		return err
 	}
 

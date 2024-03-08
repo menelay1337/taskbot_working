@@ -17,12 +17,12 @@ const (
 
 func main() {
 	cfg := config.MustLoad()
-	//storage := files.New(storagePath)
-
 	storage, err := mysql.New(cfg.Dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	storage.Init()
 
 	eventsProcessor := telegram.New(
 		tgClient.New(tgBotHost, cfg.Token),
