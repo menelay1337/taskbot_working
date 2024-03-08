@@ -22,6 +22,7 @@ const (
 	AddCmd = "/add"
 	RemoveCmd = "/remove"
 	CompleteCmd = "/complete"
+	DeadlineCmd = "/deadline"
 )
 
 func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username string) error {
@@ -47,12 +48,15 @@ func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username
 		return p.removeTask(ctx, chatID, content, username)
 	case CompleteCmd: 
 		return p.completeTask(ctx, chatID, content, username)
+	case DeadlineCmd: 
+		return p.deadlineTask(ctx, chatID, content, username)
 	case TasksCmd:
 		return p.showTasks(ctx, chatID, username)
 	default:
 		return p.tg.SendMessage(ctx, chatID, msgUnknownCommand + ": " + command)
 	}
 }
+
 
 func (p *Processor) showTasks(ctx context.Context, chatID int, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: can't send tasks", err) }()
@@ -68,11 +72,15 @@ func (p *Processor) showTasks(ctx context.Context, chatID int, username string) 
 
 	taskListText := "Task List:\n"
 	for _, task := range tasks {
+		deadline := ""
 		completedStatus := "Not Completed"
 		if task.Completed == 1 {
 			completedStatus = "Completed"
+		} 
+		if (!task.Deadline.IsZero()) {
+			deadline = fmt.Sprintf("(Deadline : %s)", task.Deadline.Format("2006-06-02 15:04:05"))
 		}
-		taskListText += fmt.Sprintf("- Task %d: %s (Created: %s, %s)\n", task.ID, task.Content, task.Created.Format("2006-01-02 15:04:05"), completedStatus)
+		taskListText += fmt.Sprintf("- Task %d: %s \n(Created: %s, %s)\n %s", task.ID, task.Content, task.Created.Format("2006-01-02 15:04:05"), completedStatus, deadline)
 	}
 
 	return p.tg.SendMessage(ctx, chatID, taskListText)
@@ -101,6 +109,42 @@ func (p *Processor) completeTask(ctx context.Context, chatID int, idString strin
 		return p.tg.SendMessage(ctx, chatID, msgCompleted)
 	} else {
 		return err
+	}
+}
+
+func (p *Processor) deadlineTask(ctx context.Context, chatID int, text string, username string) (err error) {
+	defer func() { err = e.WrapIfErr("can't do command: set deadline to task:", err) }()
+	textSlice := strings.Split(text, " ")	
+	var id, days int
+	if (len(textSlice) == 2) {
+		_, err1 := strconv.Atoi(textSlice[0])
+		_, err2 := strconv.Atoi(textSlice[1])
+
+		if err1 == nil && err2 == nil {
+			id, _ = strconv.Atoi(textSlice[0])
+			days, _ = strconv.Atoi(textSlice[1])
+		} else {
+			return p.tg.SendMessage(ctx, chatID, msgIncorrectInput + "\n Should be /deadline \"<id> <id>\"")	
+		}
+	} else {
+		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput + "\n Should be /deadline \"<id> <id>\"")	
+	}
+
+	isExists, err := p.storage.IsExistsID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if !isExists {
+		return p.tg.SendMessage(ctx, chatID, msgDoesntExists)
+	}
+
+	err = p.storage.Deadline(ctx, id, days)
+
+	if err == nil {
+		return p.tg.SendMessage(ctx, chatID, msgDeadline)
+	} else {
+		return fmt.Errorf("Error while setting deadline: ", err)
 	}
 }
 

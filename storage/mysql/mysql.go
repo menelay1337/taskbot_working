@@ -41,7 +41,7 @@ func (s *Storage) Save(ctx context.Context, content string) error {
 }
 
 func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
-	stmt := `SELECT id, content, created, completed FROM tasks`
+	stmt := `SELECT id, content, created, deadline, completed FROM tasks`
 
 	rows, err := s.db.QueryContext(ctx, stmt)
 	if err != nil {
@@ -52,10 +52,11 @@ func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
 
 	var tasks []*storage.Task
 
+
 	for rows.Next() {
 		t := &storage.Task{}
 
-		err = rows.Scan(&t.ID, &t.Content, &t.Created, &t.Completed)
+		err = rows.Scan(&t.ID, &t.Content, &t.Created, &t.Deadline, &t.Completed)
 		if err != nil {
 			return nil, err
 		}
@@ -128,6 +129,15 @@ func (s *Storage) Complete(ctx context.Context, id int) error {
 	return nil
 }
 
+func (s *Storage) Deadline(ctx context.Context, id int, days int) error {
+	stmt := "UPDATE tasks SET deadline = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY) WHERE id = ?"
+	if _, err := s.db.ExecContext(ctx, stmt, days, id); err != nil {
+		return fmt.Errorf("Can't complete task: %w", err)
+	}
+
+	return nil
+}
+
 //func (s *Storage) Clear() error {
 //	stmt := "DELETE FROM tasks WHERE deadline < UTC_TIMESTAMP()"
 //
@@ -172,12 +182,13 @@ func (s *Storage) IsExistsID(ctx context.Context, id int) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *Storage) Init(ctx context.Context) error {
+func (s *Storage) Init() error {
 	stmt := `
 	CREATE TABLE IF NOT EXISTS tasks (
     id INT AUTO_INCREMENT PRIMARY KEY,
     content VARCHAR(255) UNIQUE NOT NULL,
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	deadline TIMESTAMP DEFAULT '0000-00-00 00:00:00',
     completed BOOLEAN DEFAULT FALSE
 	);
 	`
