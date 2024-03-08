@@ -29,10 +29,10 @@ func New(dsn string) (*Storage, error) {
 
 }
 
-func (s *Storage) Save(ctx context.Context, t *storage.Task) error {
+func (s *Storage) Save(ctx context.Context, content string) error {
 	stmt := "INSERT INTO tasks (content, created) VALUES (?, UTC_TIMESTAMP())"
 
-	if _, err := s.db.ExecContext(ctx, stmt, t.Content); err != nil {
+	if _, err := s.db.ExecContext(ctx, stmt, content); err != nil {
 		return fmt.Errorf("Can't save page: %w", err)
 	}
 	
@@ -41,7 +41,7 @@ func (s *Storage) Save(ctx context.Context, t *storage.Task) error {
 }
 
 func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
-	stmt := `SELECT id, content, created FROM tasks`
+	stmt := `SELECT id, content, created, completed FROM tasks`
 
 	rows, err := s.db.QueryContext(ctx, stmt)
 	if err != nil {
@@ -53,9 +53,9 @@ func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
 	var tasks []*storage.Task
 
 	for rows.Next() {
-		var t *storage.Task
+		t := &storage.Task{}
 
-		err = rows.Scan(&t.ID, &t.Content, &t.Created)
+		err = rows.Scan(&t.ID, &t.Content, &t.Created, &t.Completed)
 		if err != nil {
 			return nil, err
 		}
@@ -149,11 +149,23 @@ func (s *Storage) Complete(ctx context.Context, id int) error {
 //}
 
 func (s *Storage) IsExists(ctx context.Context, content string) (bool, error) {
-	stmt :=	"SELECT * FROM tasks where content = ?"
+	stmt :=	"SELECT COUNT(*) FROM tasks where content = ?"
 
 	var count int
 
 	if err := s.db.QueryRowContext(ctx, stmt, content).Scan(&count); err != nil {
+		return false, fmt.Errorf("Can't check if task exists: %w", err)
+	}
+
+	return count > 0, nil
+}
+
+func (s *Storage) IsExistsID(ctx context.Context, id int) (bool, error) {
+	stmt :=	"SELECT COUNT(*) FROM tasks where id = ?"
+
+	var count int
+
+	if err := s.db.QueryRowContext(ctx, stmt, id).Scan(&count); err != nil {
 		return false, fmt.Errorf("Can't check if task exists: %w", err)
 	}
 
@@ -166,7 +178,7 @@ func (s *Storage) Init(ctx context.Context) error {
     id INT AUTO_INCREMENT PRIMARY KEY,
     content VARCHAR(255) UNIQUE NOT NULL,
     created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed BOOLEAN 
+    completed BOOLEAN DEFAULT FALSE
 	);
 	`
 	_, err := s.db.Exec(stmt)
