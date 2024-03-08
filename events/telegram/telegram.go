@@ -67,6 +67,8 @@ func (p *Processor) Fetch(ctx context.Context, limit int) ([]events.Event, error
 	}
 
 	p.offset = updates[len(updates)-1].ID + 1
+	p.saveOffset()
+
 
 	return res, nil
 }

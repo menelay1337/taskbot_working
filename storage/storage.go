@@ -7,11 +7,12 @@ import (
 )
 
 type Storage interface {
-	Save(ctx context.Context, t *Task) error
+	Save(ctx context.Context, content string) error
 	Tasks(ctx context.Context) ([]*Task, error)
 	Complete(ctx context.Context, id int) error
 	Remove(ctx context.Context, id int) error
 	IsExists(ctx context.Context, content string) (bool, error)
+	IsExistsID(ctx context.Context, id int) (bool, error)
 	SaveUser(u *User) error
 	RetrieveUser(u *User) (*User, error)
 }
@@ -23,7 +24,7 @@ type Task struct {
 	Content string
 	//Deadline time.Time
 	Created   time.Time
-	Completed bool
+	Completed uint8
 }
 type User struct {
 	Username string
