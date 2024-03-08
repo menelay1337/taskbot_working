@@ -1,9 +1,10 @@
 package mysql
 
 import (
-	"fmt"
 	"context"
 	"database/sql"
+	"fmt"
+
 	_ "github.com/go-sql-driver/mysql"
 
 	"taskbot1/storage"
@@ -35,12 +36,11 @@ func (s *Storage) Save(ctx context.Context, t *storage.Task) error {
 	if _, err := s.db.ExecContext(ctx, stmt, t.Content); err != nil {
 		return fmt.Errorf("Can't save page: %w", err)
 	}
-	
 
 	return nil
 }
 
-func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
+func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error) {
 	stmt := `SELECT id, content, created FROM tasks`
 
 	rows, err := s.db.QueryContext(ctx, stmt)
@@ -74,6 +74,30 @@ func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
 	return tasks, nil
 }
 
+func (s *Storage) RetrieveUser(u *storage.User) (*storage.User, error) {
+	stmt := "SELECT username, chatid FROM users WHERE chatid = ?"
+	row := s.db.QueryRow(stmt, u.Chatid)
+	var retrievedUser storage.User
+	err := row.Scan(&retrievedUser.Username, &retrievedUser.Chatid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No rows were returned, indicating no matching user
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &retrievedUser, nil
+}
+func (s *Storage) SaveUser(u *storage.User) error {
+	stmt := "INSERT INTO users (chatid, username) VALUES (?, ?)"
+	_, err := s.db.Exec(stmt, u.Chatid, u.Username)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 
 //func (s *Storage) PastTasks() ( []*storage.Task, error ) {
 //	stmt := `SELECT content, deadline, created FROM tasks
@@ -149,7 +173,7 @@ func (s *Storage) Complete(ctx context.Context, id int) error {
 //}
 
 func (s *Storage) IsExists(ctx context.Context, content string) (bool, error) {
-	stmt :=	"SELECT * FROM tasks where content = ?"
+	stmt := "SELECT * FROM tasks where content = ?"
 
 	var count int
 
@@ -160,22 +184,29 @@ func (s *Storage) IsExists(ctx context.Context, content string) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *Storage) Init(ctx context.Context) error {
+func (s *Storage) Init() error {
 	stmt := `
-	CREATE TABLE IF NOT EXISTS tasks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    content VARCHAR(255) UNIQUE NOT NULL,
-    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed BOOLEAN 
-	);
-	`
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        content VARCHAR(255) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        completed BOOLEAN
+    );
+`
+	stmt2 := `
+CREATE TABLE IF NOT EXISTS users (
+	username VARCHAR(255) PRIMARY KEY NOT NULL,
+	chatid INTEGER NOT NULL
+);
+`
 	_, err := s.db.Exec(stmt)
 	if err != nil {
-		return fmt.Errorf("Can't create table: %w", err)
+		return err
+	}
+	_, err = s.db.Exec(stmt2)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
-
-
-

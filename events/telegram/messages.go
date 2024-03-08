@@ -14,4 +14,6 @@ const (
 	msgNoSavedPages   = "You have no saved pages 🙊"
 	msgSaved          = "Saved! 👌"
 	msgAlreadyExists  = "You have already have this page in your list 🤗"
+	msgPlsRegister    = "Please, register! /register"
+	msgUserExist      = "User already exists! If it's you, send /auth"
 )

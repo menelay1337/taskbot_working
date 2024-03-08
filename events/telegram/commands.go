@@ -2,26 +2,48 @@ package telegram
 
 import (
 	"context"
+	"taskbot1/storage"
+
 	//"errors"
 	"log"
 	//"net/url"
 	"strings"
-
 	//"taskbot1/lib/e"
 	//"taskbot1/storage"
 )
 
+var isLogin bool
+
 const (
-	RndCmd   = "/rnd"
-	HelpCmd  = "/help"
-	StartCmd = "/start"
+	RndCmd      = "/rnd"
+	HelpCmd     = "/help"
+	StartCmd    = "/start"
+	authCmd     = "/auth"
+	registerCmd = "/register"
 )
 
 func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username string) error {
 	text = strings.TrimSpace(text)
 
 	log.Printf("got new command '%s' from '%s", text, username)
-	return p.tg.SendMessage(ctx, chatID, "got message: " + text) 
+	if text == registerCmd {
+		err := p.Register(chatID, username)
+		if err != nil {
+			return p.tg.SendMessage(ctx, chatID, "got message: "+err.Error())
+		}
+
+	}
+	if text == authCmd {
+		err := p.Auth(chatID, username)
+		if err != nil {
+			return p.tg.SendMessage(ctx, chatID, "got message: "+err.Error())
+		}
+		isLogin = true
+		return p.tg.SendMessage(ctx, chatID, "got message: "+"Succes!")
+	}
+	return nil
+	// return p.tg.SendMessage(ctx, chatID, "got message: "+"Succes!")
+	// return p.tg.SendMessage(ctx, chatID, "got message: "+text)
 
 	//if isAddCmd(text) {
 	//	return p.savePage(ctx, chatID, text, username)
@@ -37,6 +59,35 @@ func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username
 	//default:
 	//	return p.tg.SendMessage(ctx, chatID, msgUnknownCommand)
 	//}
+}
+func (p *Processor) Register(chatid int, username string) (err error) {
+	pretendent := &storage.User{
+		Username: username,
+		Chatid:   chatid,
+	}
+	_, err = p.storage.RetrieveUser(pretendent)
+	if err != nil {
+		errInSaving := p.storage.SaveUser(pretendent)
+		if errInSaving != nil {
+			return p.tg.SendMessage(context.Background(), chatid, msgUserExist)
+		}
+	}
+	return p.tg.SendMessage(context.Background(), chatid, msgHello)
+}
+func (p *Processor) Auth(chatid int, username string) (err error) {
+	//check
+	pretendent := &storage.User{
+		Username: username,
+		Chatid:   chatid,
+	}
+	_, err = p.storage.RetrieveUser(pretendent)
+	if err != nil {
+		return p.tg.SendMessage(context.Background(), chatid, msgPlsRegister)
+
+	}
+	isLogin = true
+
+	return p.tg.SendMessage(context.Background(), chatid, msgHello)
 }
 
 //func (p *Processor) savePage(ctx context.Context, chatID int, pageURL string, username string) (err error) {
