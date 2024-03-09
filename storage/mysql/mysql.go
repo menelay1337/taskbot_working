@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+
 	_ "github.com/go-sql-driver/mysql"
 
 	"taskbot1/storage"
@@ -31,7 +32,7 @@ func New(dsn string) (*Storage, error) {
 }
 
 func (s *Storage) Save(ctx context.Context, content string, chatID int) error {
-	stmt := "INSERT INTO tasks (content, created,chatid) VALUES (?, UTC_TIMESTAMP(),?)"
+	stmt := "INSERT INTO tasks (content, created, chatid) VALUES (?, CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'Asia/Almaty'), ?)"
 
 	if _, err := s.db.ExecContext(ctx, stmt, content, chatID); err != nil {
 		return fmt.Errorf("Can't save page: %w", err)
@@ -41,7 +42,7 @@ func (s *Storage) Save(ctx context.Context, content string, chatID int) error {
 }
 
 func (s *Storage) Tasks(ctx context.Context, chatID int) ([]*storage.Task, error) {
-	stmt := `SELECT id, content, created, deadline, completed FROM tasks WHERE chatid =?`
+	stmt := `SELECT id, content, created, deadline, completed FROM tasks WHERE chatid = ?`
 
 	rows, err := s.db.QueryContext(ctx, stmt, chatID)
 	if err != nil {
@@ -128,7 +129,7 @@ func (s *Storage) Complete(ctx context.Context, id int) error {
 }
 
 func (s *Storage) Deadline(ctx context.Context, id int, days int) error {
-	stmt := "UPDATE tasks SET deadline = DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? DAY) WHERE id = ?"
+	stmt := "UPDATE tasks SET deadline = DATE_ADD(created, INTERVAL ? DAY) WHERE id = ?"
 	if _, err := s.db.ExecContext(ctx, stmt, days, id); err != nil {
 		return fmt.Errorf("Can't complete task: %w", err)
 	}
@@ -184,15 +185,16 @@ func (s *Storage) Init() error {
 	stmt := `
 	CREATE TABLE IF NOT EXISTS tasks (
 		id INT AUTO_INCREMENT PRIMARY KEY,
-		chatid INT NOT NULL
+		chatid INT NOT NULL,
 		content VARCHAR(255) UNIQUE NOT NULL,
-		created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		created TIMESTAMP DEFAULT CONVERT_TZ(UTC_TIMESTAMP(), 'UTC', 'Asia/Almaty'),
 		deadline TIMESTAMP DEFAULT "0000-00-00 00:00:00",
 		completed BOOLEAN DEFAULT FALSE
 	);
 	`
 	_, err := s.db.Exec(stmt)
 	if err != nil {
+		fmt.Println(err)
 		return fmt.Errorf("Can't create table: %w", err)
 	}
 

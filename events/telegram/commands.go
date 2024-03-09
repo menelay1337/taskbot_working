@@ -26,8 +26,6 @@ const (
 	RemoveCmd   = "/remove"
 	CompleteCmd = "/complete"
 	DeadlineCmd = "/deadline"
-	authCmd     = "/auth"
-	registerCmd = "/register"
 )
 
 func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username string) error {
@@ -41,10 +39,6 @@ func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username
 	}
 
 	switch command {
-	// case authCmd:
-	// 	return p.Auth(chatID, username)
-	// case registerCmd:
-	// 	return p.Register(chatID, username)
 	case StartCmd:
 		return p.tg.SendMessage(ctx, chatID, msgHello)
 	case HelpCmd:
@@ -52,25 +46,15 @@ func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username
 	case CommandsCmd:
 		return p.tg.SendMessage(ctx, chatID, msgCommands)
 	case AddCmd:
-
 		return p.saveTask(ctx, chatID, content, username)
-
 	case RemoveCmd:
-
 		return p.removeTask(ctx, chatID, content, username)
-
 	case CompleteCmd:
-
 		return p.completeTask(ctx, chatID, content, username)
-
 	case DeadlineCmd:
-
 		return p.deadlineTask(ctx, chatID, content, username)
-
 	case TasksCmd:
-
 		return p.showTasks(ctx, chatID, username)
-
 	default:
 		return p.tg.SendMessage(ctx, chatID, msgUnknownCommand+": "+command)
 	}
