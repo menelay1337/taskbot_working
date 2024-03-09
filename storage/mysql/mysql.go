@@ -1,9 +1,10 @@
 package mysql
 
 import (
-	"fmt"
 	"context"
 	"database/sql"
+	"fmt"
+
 	_ "github.com/go-sql-driver/mysql"
 
 	"taskbot1/storage"
@@ -29,21 +30,20 @@ func New(dsn string) (*Storage, error) {
 
 }
 
-func (s *Storage) Save(ctx context.Context, content string) error {
-	stmt := "INSERT INTO tasks (content, created) VALUES (?, UTC_TIMESTAMP())"
+func (s *Storage) Save(ctx context.Context, content string, chatID int) error {
+	stmt := "INSERT INTO tasks (content, created,chatid) VALUES (?, UTC_TIMESTAMP(),?)"
 
-	if _, err := s.db.ExecContext(ctx, stmt, content); err != nil {
+	if _, err := s.db.ExecContext(ctx, stmt, content, chatID); err != nil {
 		return fmt.Errorf("Can't save page: %w", err)
 	}
-	
 
 	return nil
 }
 
-func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
-	stmt := `SELECT id, content, created, deadline, completed FROM tasks`
+func (s *Storage) Tasks(ctx context.Context, chatID int) ([]*storage.Task, error) {
+	stmt := `SELECT id, content, created, deadline, completed FROM tasks WHERE chatid =?`
 
-	rows, err := s.db.QueryContext(ctx, stmt)
+	rows, err := s.db.QueryContext(ctx, stmt, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,6 @@ func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
 	defer rows.Close()
 
 	var tasks []*storage.Task
-
 
 	for rows.Next() {
 		t := &storage.Task{}
@@ -74,7 +73,6 @@ func (s *Storage) Tasks(ctx context.Context) ([]*storage.Task, error ) {
 
 	return tasks, nil
 }
-
 
 //func (s *Storage) PastTasks() ( []*storage.Task, error ) {
 //	stmt := `SELECT content, deadline, created FROM tasks
@@ -159,7 +157,7 @@ func (s *Storage) Deadline(ctx context.Context, id int, days int) error {
 //}
 
 func (s *Storage) IsExists(ctx context.Context, content string) (bool, error) {
-	stmt :=	"SELECT COUNT(*) FROM tasks where content = ?"
+	stmt := "SELECT COUNT(*) FROM tasks where content = ?"
 
 	var count int
 
@@ -171,7 +169,7 @@ func (s *Storage) IsExists(ctx context.Context, content string) (bool, error) {
 }
 
 func (s *Storage) IsExistsID(ctx context.Context, id int) (bool, error) {
-	stmt :=	"SELECT COUNT(*) FROM tasks where id = ?"
+	stmt := "SELECT COUNT(*) FROM tasks where id = ?"
 
 	var count int
 
@@ -185,11 +183,12 @@ func (s *Storage) IsExistsID(ctx context.Context, id int) (bool, error) {
 func (s *Storage) Init() error {
 	stmt := `
 	CREATE TABLE IF NOT EXISTS tasks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    content VARCHAR(255) UNIQUE NOT NULL,
-    created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	deadline TIMESTAMP DEFAULT '0000-00-00 00:00:00',
-    completed BOOLEAN DEFAULT FALSE
+		id INT AUTO_INCREMENT PRIMARY KEY,
+		chatid INT NOT NULL
+		content VARCHAR(255) UNIQUE NOT NULL,
+		created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		deadline TIMESTAMP DEFAULT "0000-00-00 00:00:00",
+		completed BOOLEAN DEFAULT FALSE
 	);
 	`
 	_, err := s.db.Exec(stmt)
@@ -199,6 +198,3 @@ func (s *Storage) Init() error {
 
 	return nil
 }
-
-
-

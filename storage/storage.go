@@ -7,8 +7,8 @@ import (
 )
 
 type Storage interface {
-	Save(ctx context.Context, content string) error
-	Tasks(ctx context.Context) ([]*Task, error)
+	Save(ctx context.Context, content string, chatID int) error
+	Tasks(ctx context.Context, chatID int) ([]*Task, error)
 	Complete(ctx context.Context, id int) error
 	Remove(ctx context.Context, id int) error
 	Deadline(ctx context.Context, id int, days int) error
@@ -18,14 +18,11 @@ type Storage interface {
 
 var ErrNoSavedTasks = errors.New("There are no saved tasks.")
 
-
 type Task struct {
-	ID		  int
+	ID        int
+	chatID    string
 	Content   string
-	Created	  time.Time
+	Created   time.Time
 	Deadline  time.Time
 	Completed uint8
 }
-
-
-

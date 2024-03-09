@@ -6,6 +6,7 @@ const msgHelp = `I can save and keep your tasks. In any time you can fetch past 
 /tasks command, command to see your tasks.
 /commands command to obtain available options.
 /help command to get help with the bot.
+If you are the first time here - send /register
 `
 
 const msgHello = "Hi, that's Task bot \n\n" + msgHelp
@@ -19,6 +20,7 @@ const msgCommands = `
 /remove "<id>" removes specific task with some <id>
 /complete "<id>" marks task with <id> as completed.
 /deadline "<id> <days>" sets deadline to task with <id> for <days> days.
+
 `
 
 const (
@@ -31,6 +33,8 @@ const (
 	msgNoSavedTasks = "You have no saved task"
 	msgDoesntExists = "Task doesn't exist."
 	msgUnknownCommand = "Unknown command"
-	msgAlreadyExists = "You have already have this task in your list"
+	msgAlreadyExists  = "You have already have this task in your list"
 	msgIncorrectInput = "Incorrept input"
+	msgPlsRegister    = "Please, register! /register"
+	msgUserExist      = "User already exists! If it's you, send /auth"
 )

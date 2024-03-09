@@ -3,10 +3,11 @@ package telegram
 import (
 	"context"
 	"errors"
-	"log"
 	"fmt"
-	"strconv"
+	"log"
 	"regexp"
+	"strconv"
+
 	//"net/url"
 	"strings"
 
@@ -14,15 +15,19 @@ import (
 	"taskbot1/storage"
 )
 
+var isLogin bool
+
 const (
-	StartCmd = "/start"
-	HelpCmd  = "/help"
+	StartCmd    = "/start"
+	HelpCmd     = "/help"
 	CommandsCmd = "/commands"
-	TasksCmd = "/tasks"
-	AddCmd = "/add"
-	RemoveCmd = "/remove"
+	TasksCmd    = "/tasks"
+	AddCmd      = "/add"
+	RemoveCmd   = "/remove"
 	CompleteCmd = "/complete"
 	DeadlineCmd = "/deadline"
+	authCmd     = "/auth"
+	registerCmd = "/register"
 )
 
 func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username string) error {
@@ -36,32 +41,75 @@ func (p *Processor) doCmd(ctx context.Context, text string, chatID int, username
 	}
 
 	switch command {
+	// case authCmd:
+	// 	return p.Auth(chatID, username)
+	// case registerCmd:
+	// 	return p.Register(chatID, username)
 	case StartCmd:
 		return p.tg.SendMessage(ctx, chatID, msgHello)
 	case HelpCmd:
 		return p.tg.SendMessage(ctx, chatID, msgHelp)
 	case CommandsCmd:
 		return p.tg.SendMessage(ctx, chatID, msgCommands)
-	case AddCmd: 
+	case AddCmd:
+
 		return p.saveTask(ctx, chatID, content, username)
-	case RemoveCmd: 
+
+	case RemoveCmd:
+
 		return p.removeTask(ctx, chatID, content, username)
-	case CompleteCmd: 
+
+	case CompleteCmd:
+
 		return p.completeTask(ctx, chatID, content, username)
-	case DeadlineCmd: 
+
+	case DeadlineCmd:
+
 		return p.deadlineTask(ctx, chatID, content, username)
+
 	case TasksCmd:
+
 		return p.showTasks(ctx, chatID, username)
+
 	default:
-		return p.tg.SendMessage(ctx, chatID, msgUnknownCommand + ": " + command)
+		return p.tg.SendMessage(ctx, chatID, msgUnknownCommand+": "+command)
 	}
 }
 
+// func (p *Processor) Register(chatID int, username string) (err error) {
+// 	pretendent := &storage.User{
+// 		Username: username,
+// 		Chatid:   chatID,
+// 	}
+// 	_, err = p.storage.RetrieveUser(pretendent)
+// 	if err != nil {
+// 		errInSaving := p.storage.SaveUser(pretendent)
+// 		if errInSaving != nil {
+// 			return p.tg.SendMessage(context.Background(), chatID, msgUserExist)
+// 		}
+// 	}
+// 	return p.tg.SendMessage(context.Background(), chatID, "Send /auth to start!")
+// }
+// func (p *Processor) Auth(chatID int, username string) (err error) {
+// 	//check
+// 	pretendent := &storage.User{
+// 		Username: username,
+// 		Chatid:   chatID,
+// 	}
+// 	_, err = p.storage.RetrieveUser(pretendent)
+// 	if err != nil {
+// 		return p.tg.SendMessage(context.Background(), chatID, msgPlsRegister)
+
+// 	}
+// 	isLogin = true
+
+// 	return p.tg.SendMessage(context.Background(), chatID, msgHello)
+// }
 
 func (p *Processor) showTasks(ctx context.Context, chatID int, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: can't send tasks", err) }()
 
-	tasks, err := p.storage.Tasks(ctx)
+	tasks, err := p.storage.Tasks(ctx, chatID)
 	if err != nil && !errors.Is(err, storage.ErrNoSavedTasks) {
 		return err
 	}
@@ -76,8 +124,8 @@ func (p *Processor) showTasks(ctx context.Context, chatID int, username string) 
 		completedStatus := "Not Completed"
 		if task.Completed == 1 {
 			completedStatus = "Completed"
-		} 
-		if (!task.Deadline.IsZero()) {
+		}
+		if !task.Deadline.IsZero() {
 			deadline = fmt.Sprintf("(Deadline : %s)", task.Deadline.Format("2006-06-02 15:04:05"))
 		}
 		taskListText += fmt.Sprintf("- Task %d: %s \n(Created: %s, %s)\n %s\n", task.ID, task.Content, task.Created.Format("2006-01-02 15:04:05"), completedStatus, deadline)
@@ -89,9 +137,9 @@ func (p *Processor) showTasks(ctx context.Context, chatID int, username string) 
 func (p *Processor) completeTask(ctx context.Context, chatID int, idString string, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: complete task:", err) }()
 
-	_, err = strconv.Atoi(idString) 
+	_, err = strconv.Atoi(idString)
 	if err != nil {
-		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput)	
+		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput)
 	}
 	id, _ := strconv.Atoi(idString)
 
@@ -114,9 +162,9 @@ func (p *Processor) completeTask(ctx context.Context, chatID int, idString strin
 
 func (p *Processor) deadlineTask(ctx context.Context, chatID int, text string, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: set deadline to task:", err) }()
-	textSlice := strings.Split(text, " ")	
+	textSlice := strings.Split(text, " ")
 	var id, days int
-	if (len(textSlice) == 2) {
+	if len(textSlice) == 2 {
 		_, err1 := strconv.Atoi(textSlice[0])
 		_, err2 := strconv.Atoi(textSlice[1])
 
@@ -124,10 +172,10 @@ func (p *Processor) deadlineTask(ctx context.Context, chatID int, text string, u
 			id, _ = strconv.Atoi(textSlice[0])
 			days, _ = strconv.Atoi(textSlice[1])
 		} else {
-			return p.tg.SendMessage(ctx, chatID, msgIncorrectInput + "\n Should be /deadline \"<id> <id>\"")	
+			return p.tg.SendMessage(ctx, chatID, msgIncorrectInput+"\n Should be /deadline \"<id> <id>\"")
 		}
 	} else {
-		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput + "\n Should be /deadline \"<id> <id>\"")	
+		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput+"\n Should be /deadline \"<id> <id>\"")
 	}
 
 	isExists, err := p.storage.IsExistsID(ctx, id)
@@ -175,7 +223,7 @@ func (p *Processor) saveTask(ctx context.Context, chatID int, content string, us
 		return p.tg.SendMessage(ctx, chatID, msgAlreadyExists)
 	}
 
-	if err := p.storage.Save(ctx, content); err != nil {
+	if err := p.storage.Save(ctx, content, chatID); err != nil {
 		return err
 	}
 
@@ -185,9 +233,9 @@ func (p *Processor) saveTask(ctx context.Context, chatID int, content string, us
 func (p *Processor) removeTask(ctx context.Context, chatID int, idString string, username string) (err error) {
 	defer func() { err = e.WrapIfErr("can't do command: remove task", err) }()
 
-	_, err = strconv.Atoi(idString) 
+	_, err = strconv.Atoi(idString)
 	if err != nil {
-		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput)	
+		return p.tg.SendMessage(ctx, chatID, msgIncorrectInput)
 	}
 	id, _ := strconv.Atoi(idString)
 
@@ -222,9 +270,5 @@ func fetchInput(text string) (string, string, error) {
 	command := "/" + matches[1]
 	content := matches[2]
 
-	
 	return command, content, nil
 }
-
-
-
