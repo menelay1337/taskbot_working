@@ -110,7 +110,7 @@ func (p *Processor) showTasks(ctx context.Context, chatID int, username string) 
 			completedStatus = "Completed"
 		}
 		if !task.Deadline.IsZero() {
-			deadline = fmt.Sprintf("(Deadline : %s)", task.Deadline.Format("2006-06-02 15:04:05"))
+			deadline = fmt.Sprintf("(Deadline : %s)", task.Deadline.Format("2006-01-02 15:04:05"))
 		}
 		taskListText += fmt.Sprintf("- Task %d: %s \n(Created: %s, %s)\n %s\n", task.ID, task.Content, task.Created.Format("2006-01-02 15:04:05"), completedStatus, deadline)
 	}
